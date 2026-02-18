@@ -19,26 +19,12 @@ const API_BASE_URL = resolveBaseUrl();
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
-class ApiClient implements PromiseLike<any> {
-  private table = '';
+class ApiQuery implements PromiseLike<any> {
   private queryParams: Record<string, string> = {};
   private method: HttpMethod = 'GET';
   private bodyData: any = null;
-  private authToken: string | null = null;
 
-  constructor() {
-    if (typeof window !== 'undefined') {
-      this.authToken = window.localStorage.getItem(AUTH_TOKEN_KEY);
-    }
-  }
-
-  from(table: string) {
-    this.table = table.replace(/^\/+/, '');
-    this.queryParams = {};
-    this.method = 'GET';
-    this.bodyData = null;
-    return this;
-  }
+  constructor(private readonly client: ApiClient, private readonly table: string) {}
 
   select(columns = '*') {
     this.method = 'GET';
@@ -83,31 +69,8 @@ class ApiClient implements PromiseLike<any> {
     return this;
   }
 
-  setAuthToken(token: string | null) {
-    this.authToken = token;
-    if (typeof window !== 'undefined') {
-      if (token) {
-        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-      } else {
-        window.localStorage.removeItem(AUTH_TOKEN_KEY);
-      }
-    }
-  }
-
-  getAuthToken() {
-    return this.authToken;
-  }
-
-  getBaseUrl() {
-    return API_BASE_URL;
-  }
-
-  clearAuthToken() {
-    this.setAuthToken(null);
-  }
-
   private buildUrl() {
-    const finalUrl = new URL(`${API_BASE_URL}/${this.table}`, window.location.origin);
+    const finalUrl = new URL(`${this.client.getBaseUrl()}/${this.table}`, window.location.origin);
     for (const [key, value] of Object.entries(this.queryParams)) {
       finalUrl.searchParams.append(key, value);
     }
@@ -118,9 +81,10 @@ class ApiClient implements PromiseLike<any> {
     try {
       const url = this.buildUrl();
       const headers: Record<string, string> = { Accept: 'application/json' };
+      const authToken = this.client.getAuthToken();
 
-      if (this.authToken) {
-        headers.Authorization = `Bearer ${this.authToken}`;
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
       }
       if (this.bodyData !== null && this.bodyData !== undefined) {
         headers['Content-Type'] = 'application/json';
@@ -157,6 +121,44 @@ class ApiClient implements PromiseLike<any> {
   ): Promise<TResult1 | TResult2> {
     return this.execute().then(onfulfilled, onrejected);
   }
+}
+
+class ApiClient {
+  private authToken: string | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.authToken = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    }
+  }
+
+  from(table: string) {
+    return new ApiQuery(this, table.replace(/^\/+/, ''));
+  }
+
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+    if (typeof window !== 'undefined') {
+      if (token) {
+        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+      } else {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+      }
+    }
+  }
+
+  getAuthToken() {
+    return this.authToken;
+  }
+
+  getBaseUrl() {
+    return API_BASE_URL;
+  }
+
+  clearAuthToken() {
+    this.setAuthToken(null);
+  }
+
 }
 
 export const api = new ApiClient();
